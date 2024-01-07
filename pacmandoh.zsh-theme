@@ -17,7 +17,7 @@ PACMANDOH_PROMPT_ALTERNATIVE=multiline # multiline | oneline
 PACMANDOH_NEED_TIMER=yes
 PACMANDOH_NEWLINE_BEFORE_PROMPT=yes
 
-#%%================================================================================================================%%#
+#%%=================================================================================%%#
 
 # color
 local reset="%{$reset_color%}"
@@ -220,7 +220,7 @@ ZSH_THEME_GIT_PROMPT_SUFFIX=$reset
 ZSH_THEME_GIT_PROMPT_DIRTY="${red}✘✘✘"
 ZSH_THEME_GIT_PROMPT_CLEAN="${green}✔"
 
-#%%=========================================================================================%%#
+#%%=================================================================================%%#
 # ZSH CONFIG OPTIONALS
 # by Kali Linux
 
