@@ -140,6 +140,7 @@ if [[ $PACMANDOH_NEED_TIMER == yes ]]; then
     if [[ "$OSTYPE" == "linux-gnu" ]]; then
       time_millis="$(date +%s.%3N)"
     elif [[ "$OSTYPE" == "darwin"* ]]; then
+      # TODO Solve the problem of performance degradation and visible delay caused by calling ruby
       time_millis="$(ruby -e 'puts Time.now.strftime("%s.%3N")')" # Since MacOS catalina, MacOS has built-in Ruby
     fi
     echo -n $time_millis
