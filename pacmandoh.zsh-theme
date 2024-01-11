@@ -127,7 +127,7 @@ constructor() {
     local virtualenv_info=$(utils "$VIRTUAL_ENV" " ${gray}using$reset${bold} " "$reset")
     local node_info=$(utils_is_project "package.json" "$(node --version 2>/dev/null)" "(${bold}${dark_green}" ") $reset")
     local git_status_style=" "
-    echo -n "$node_info$root_info$icon%n$reset$conda_info${virtualenv_info}$(git_status_info $git_status_style)$(git_prompt_info) %(?:$bold$green%1{➜%} :$bold$red%1{➜%} )$reset[$path_color%~$reset${line_color}] ─$(prompt_char)$reset "
+    echo -n "$node_info$root_info$icon%n$reset$conda_info${virtualenv_info}$(git_status_info $git_status_style)$(git_prompt_info) %(?:$bold${green}➜ :$bold${red}➜ )${reset}[$path_color%~$reset${line_color}] ─$(prompt_char)$reset "
     ;;
   esac
 }
@@ -151,13 +151,13 @@ if [[ $PACMANDOH_NEED_TIMER == yes ]]; then
   }
 fi
 
-check_exit_status() {
-  if [[ $PACMANDOH_NEED_TIMER == yes ]]; then
-    echo -n "%(?:$bold$green$(status_box $cost ✔)$reset :$bold$red$(status_box $cost ✘)$reset )"
-  else
-    echo -n "%(?:$bold${green}[✔]$reset :$bold${red}[✘]$reset )"
-  fi
-}
+# check_exit_status() {
+#   if [[ $PACMANDOH_NEED_TIMER == yes ]]; then
+#     echo -n "%(?:$bold$green$(status_box $cost ✔)$reset :$bold$red$(status_box $cost ✘)$reset )"
+#   else
+#     echo -n "%(?:$bold${green}[✔]$reset :$bold${red}[✘]$reset )"
+#   fi
+# }
 
 preexec() {
   [[ $PACMANDOH_PROMPT_ALTERNATIVE == oneline ]] && PACMANDOH_NEED_TIMER=no && PACMANDOH_NEWLINE_BEFORE_PROMPT=no
