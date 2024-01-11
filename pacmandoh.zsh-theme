@@ -53,7 +53,7 @@ constructor() {
     fi
   }
 
-  # Without using vcs_info, write it yourself through `git status`
+  # Without using vcs_info, write it through `git status`
   git_status_info() {
     if git branch >/dev/null 2>/dev/null; then
       local -a git_status
@@ -119,7 +119,7 @@ constructor() {
     local virtualenv_info=$(utils "$VIRTUAL_ENV" "($reset${bold}📦 " ")-$reset")
     local node_info=$(utils_is_project "package.json" "$(node --version 2>/dev/null)" "- [${bold}${dark_green}⬢ " "]$reset")
     local git_status_style=" $(get $reset $blue)➜ "
-    echo -n "${line_color}╭──($root_info%n$icon$(box_name)$reset${line_color})$conda_info$(git_prompt_info)$(git_status_info $git_status_style)\n${line_color}├ ${root_info}➜$reset ${line_color}{$path_color%~$reset${line_color}} ${node_info}\n${line_color}╰$virtualenv_info$root_info$(prompt_char)$reset "
+    echo -n "${line_color}╭──($root_info%n$icon$(box_name)$reset${line_color})$conda_info$(git_prompt_info)$(git_status_info $git_status_style)\n${line_color}├ %(?:$bold${green}➜ :$bold${red}➜ )$reset${line_color}{$path_color%~$reset${line_color}} ${node_info}\n${line_color}╰$virtualenv_info$root_info$(prompt_char)$reset "
     ;;
   oneline)
     local icon=$(get "" "💀$reset$red$bold")
@@ -127,7 +127,7 @@ constructor() {
     local virtualenv_info=$(utils "$VIRTUAL_ENV" " ${gray}using$reset${bold} " "$reset")
     local node_info=$(utils_is_project "package.json" "$(node --version 2>/dev/null)" "(${bold}${dark_green}" ") $reset")
     local git_status_style=" "
-    echo -n "$node_info$root_info$icon%n$reset$conda_info${virtualenv_info}$(git_status_info $git_status_style)$(git_prompt_info)${line_color} ➜ [$path_color%~$reset${line_color}] ─$(prompt_char)$reset "
+    echo -n "$node_info$root_info$icon%n$reset$conda_info${virtualenv_info}$(git_status_info $git_status_style)$(git_prompt_info) %(?:$bold$green%1{➜%} :$bold$red%1{➜%} )$reset[$path_color%~$reset${line_color}] ─$(prompt_char)$reset "
     ;;
   esac
 }
@@ -152,18 +152,10 @@ if [[ $PACMANDOH_NEED_TIMER == yes ]]; then
 fi
 
 check_exit_status() {
-  if [[ $status -ne 0 ]]; then
-    if [[ $PACMANDOH_NEED_TIMER == yes ]]; then
-      echo -n "$red$bold $(status_box $cost ✘) $reset"
-    else
-      echo -n "$red$bold [✘] $reset"
-    fi
+  if [[ $PACMANDOH_NEED_TIMER == yes ]]; then
+    echo -n "%(?:$bold$green$(status_box $cost ✔)$reset :$bold$red$(status_box $cost ✘)$reset )"
   else
-    if [[ $PACMANDOH_NEED_TIMER == yes ]]; then
-      echo -n "$green$bold $(status_box $cost ✔) $reset"
-    else
-      echo -n "$green$bold [✔] $reset"
-    fi
+    echo -n "%(?:$bold${green}[✔]$reset :$bold${red}[✘]$reset )"
   fi
 }
 
