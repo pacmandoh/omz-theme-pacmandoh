@@ -151,13 +151,13 @@ if [[ $PACMANDOH_NEED_TIMER == yes ]]; then
   }
 fi
 
-# check_exit_status() {
-#   if [[ $PACMANDOH_NEED_TIMER == yes ]]; then
-#     echo -n "%(?:$bold$green$(status_box $cost ✔)$reset :$bold$red$(status_box $cost ✘)$reset )"
-#   else
-#     echo -n "%(?:$bold${green}[✔]$reset :$bold${red}[✘]$reset )"
-#   fi
-# }
+check_exit_status() {
+  if [[ $PACMANDOH_NEED_TIMER == yes ]]; then
+    echo -n "%(?:$bold$green$(status_box $cost ✔)$reset :$bold$red$(status_box $cost ✘)$reset )"
+  else
+    echo -n "%(?:$bold${green}[✔]$reset :$bold${red}[✘]$reset )"
+  fi
+}
 
 preexec() {
   [[ $PACMANDOH_PROMPT_ALTERNATIVE == oneline ]] && PACMANDOH_NEED_TIMER=no && PACMANDOH_NEWLINE_BEFORE_PROMPT=no
