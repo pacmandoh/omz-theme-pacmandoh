@@ -119,7 +119,7 @@ constructor() {
     local virtualenv_info=$(utils "$VIRTUAL_ENV" "($reset${bold}📦 " ")-$reset")
     local node_info=$(utils_is_project "package.json" "$(node --version 2>/dev/null)" "- [${bold}${dark_green}⬢ " "]$reset")
     local git_status_style=" $(get $reset $blue)➜ "
-    echo -n "${line_color}╭──($root_info%n$icon$(box_name)$reset${line_color})$conda_info$(git_prompt_info)$(git_status_info $git_status_style)\n${line_color}├ %(?:$bold${green}➜ :$bold${red}➜ )$reset${line_color}{$path_color%~$reset${line_color}} ${node_info}\n${line_color}╰$virtualenv_info$root_info$(prompt_char)$reset "
+    echo -n "${line_color}╭──($root_info%n$icon$(box_name)$reset${line_color})$conda_info$(git_prompt_info)$(git_status_info $git_status_style)\n${line_color}├ %(?:$bold${light_green}➜ :$bold${red}➜ )$reset${line_color}{$path_color%~$reset${line_color}} ${node_info}\n${line_color}╰$virtualenv_info$root_info$(prompt_char)$reset "
     ;;
   oneline)
     local icon=$(get "" "💀$reset$red$bold")
@@ -127,7 +127,7 @@ constructor() {
     local virtualenv_info=$(utils "$VIRTUAL_ENV" " ${gray}using$reset${bold} " "$reset")
     local node_info=$(utils_is_project "package.json" "$(node --version 2>/dev/null)" "(${bold}${dark_green}" ") $reset")
     local git_status_style=" "
-    echo -n "$node_info$root_info$icon%n$reset$conda_info${virtualenv_info}$(git_status_info $git_status_style)$(git_prompt_info) %(?:$bold${green}➜ :$bold${red}➜ )${reset}${line_color}[$path_color%~$reset${line_color}] ─$(prompt_char)$reset "
+    echo -n "$node_info$root_info$icon%n$reset$conda_info${virtualenv_info}$(git_status_info $git_status_style)$(git_prompt_info) %(?:$bold${light_green}➜ :$bold${red}➜ )${reset}${line_color}[$path_color%~$reset${line_color}] ─$(prompt_char)$reset "
     ;;
   esac
 }
