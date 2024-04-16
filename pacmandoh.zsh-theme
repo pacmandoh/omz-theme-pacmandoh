@@ -93,7 +93,14 @@ constructor() {
   # without using git_prompt_info
   # due to it cannot take effect in the constructor()
   git_info() {
+    git branch &>/dev/null || return
     echo -n "${ZSH_THEME_GIT_PROMPT_PREFIX}$(git_current_branch)$(parse_git_dirty)${ZSH_THEME_GIT_PROMPT_SUFFIX}"
+  }
+
+  node_prompt_info() {
+    which node &>/dev/null || return
+    local node_prompt=${$(node --version)#v}
+    echo "${ZSH_THEME_NVM_PROMPT_PREFIX}${node_prompt:gs/%/%%}${ZSH_THEME_NVM_PROMPT_SUFFIX}"
   }
 
   utils() {
@@ -104,7 +111,7 @@ constructor() {
   }
 
   utils_is_project() {
-    if [[ -f $1 ]]; then
+    if [[ -f $1 && -n $2 ]]; then
       echo -n "$(utils $2 $3 $4)"
     fi
   }
@@ -123,7 +130,7 @@ constructor() {
     local icon=$(get " $reset${gray}at $blue" " 💀 $reset$red")
     local conda_info=$(utils "$CONDA_DEFAULT_ENV" "-($magenta${bold}🅒 " ")$reset")
     local virtualenv_info=$(utils "$VIRTUAL_ENV" "($reset${bold}📦 " ")-$reset")
-    local node_info=$(utils_is_project "package.json" "$(node --version 2>/dev/null)" "- [${bold}${dark_green}⬢ " "]$reset")
+    local node_info=$(utils_is_project "package.json" "$(node_prompt_info)" "- [${bold}${dark_green}⬢ " "]$reset")
     local git_status_style=" $(get $reset $blue)➜ "
     echo -n "${line_color}╭──($root_info%n$icon$(box_name)$reset${line_color})$conda_info$(git_info)$(git_status_info $git_status_style)\n${line_color}├ %(?:$bold${light_green}➜ :$bold${red}➜ )$reset${line_color}{$path_color%~$reset${line_color}} ${node_info}\n${line_color}╰$virtualenv_info$root_info$(prompt_char)$reset "
     ;;
@@ -131,7 +138,7 @@ constructor() {
     local icon=$(get "" "💀$reset$red$bold")
     local conda_info=$(utils "$CONDA_DEFAULT_ENV" " ${gray}using$magenta${bold} " "$reset")
     local virtualenv_info=$(utils "$VIRTUAL_ENV" " ${gray}using$reset${bold} " "$reset")
-    local node_info=$(utils_is_project "package.json" "$(node --version 2>/dev/null)" "(${bold}${dark_green}" ") $reset")
+    local node_info=$(utils_is_project "package.json" "$(node_prompt_info)" "(${bold}${dark_green}" ") $reset")
     local git_status_style=" "
     echo -n "$node_info$root_info$icon%n$reset$conda_info${virtualenv_info}$(git_status_info $git_status_style)$(git_info) %(?:$bold${light_green}➜ :$bold${red}➜ )${reset}${line_color}[$path_color%~$reset${line_color}] ─$(prompt_char)$reset "
     ;;
