@@ -195,7 +195,8 @@ config_zshrc=("auto" "manual")
 select_option "${config_zshrc[@]}"
 if [ "$selected_option" == auto ]; then
   [ "$ZSH_THEME" != "random" ] && tput cuu 1 && tput ed &&
-    sed -i -E '/^[[:space:]]*#?[[:space:]]*ZSH_THEME=/ s/^#?[^"]*(ZSH_THEME=).*/\1"pacmandoh"/' "$HOME/.zshrc" &&
+    # sed -i -E '/^[[:space:]]*#?[[:space:]]*ZSH_THEME=/ s/^#?[^"]*(ZSH_THEME=).*/\1"pacmandoh"/' "$HOME/.zshrc" &&
+    omz theme set pacmandoh &&
     printf "\033[1mDone!\033[92m ✔\033[0m\n" &&
     sleep 1 &&
     tput cuu 1 && tput ed
