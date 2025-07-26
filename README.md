@@ -1,7 +1,5 @@
 Inspired by kali-zsh-terminal :heart:
 
-⚠️ You should run `./install.sh` on **zsh** !! not `bash` !!
-
 <samp><b>Oh-My-ZSH theme for PacmanDoh's Mac Terminal</b></samp>
 
 ## Preview 👀
