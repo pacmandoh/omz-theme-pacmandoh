@@ -122,6 +122,15 @@ if [ "$selected_option" == yes ]; then
   _source=("github" "mirrors_tsinghua" "outside_installer")
   select_option "${_source[@]}"
   tput cuu 1 && tput ed
+  # check zsh
+  if ! command -v zsh >/dev/null 2>&1; then
+    printf "\033[1m\033[91mZsh is not installed!\033[0m \033[91m✘\033[0m\n"
+    printf "\033[1mPlease install \033[95mzsh\033[0m \033[1mbefore continuing this installer.\033[0m\n"
+    printf "\033[1mExample (Ubuntu/Debian):\033[0m sudo apt install zsh\n"
+    printf "\033[1mThen re-run: \033[93m./install.sh\033[0m\n"
+    sleep 2
+    exit 1
+  fi
   if [ "$selected_option" == "mirrors_tsinghua" ]; then
     # tsinghua installer!
     if [ -d "$HOME/.oh-my-zsh" ]; then
@@ -130,11 +139,9 @@ if [ "$selected_option" == yes ]; then
       tput cuu 1 && tput ed
     else
       printf "\033[1m\033[92mInstalling...\033[0m\n"
-      exec &>/dev/null
-      git clone https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git "$HOME/ohmyzsh" &&
-        REMOTE=https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git RUNZSH=no sh ~/ohmyzsh/tools/install.sh >/dev/null && echo
-      [ -d "$HOME/ohmyzsh" ] && rm -rf "$HOME/ohmyzsh"
-      exec &>/dev/tty
+      git clone https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git "$HOME/ohmyzsh" &>/dev/null &&
+      REMOTE=https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git RUNZSH=no bash ~/ohmyzsh/tools/install.sh < /dev/null &>/dev/null &&
+    [ -d "$HOME/ohmyzsh" ] && rm -rf "$HOME/ohmyzsh"
       tput cuu 1 && tput ed
       printf "\033[1mDone!\033[92m ✔\033[0m\n"
       sleep 1 
@@ -195,8 +202,7 @@ config_zshrc=("auto" "manual")
 select_option "${config_zshrc[@]}"
 if [ "$selected_option" == auto ]; then
   [ "$ZSH_THEME" != "random" ] && tput cuu 1 && tput ed &&
-    # sed -i -E '/^[[:space:]]*#?[[:space:]]*ZSH_THEME=/ s/^#?[^"]*(ZSH_THEME=).*/\1"pacmandoh"/' "$HOME/.zshrc" &&
-    omz theme set pacmandoh &&
+    sed -i -E 's/^ZSH_THEME=.*/ZSH_THEME="pacmandoh"/' "$HOME/.zshrc" &&
     printf "\033[1mDone!\033[92m ✔\033[0m\n" &&
     sleep 1 &&
     tput cuu 1 && tput ed
