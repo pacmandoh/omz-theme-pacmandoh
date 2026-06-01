@@ -20,6 +20,12 @@ You have the option to use the install.sh script, which installs [Oh-My-Zsh](htt
 
 Alternatively, you can manually copy the theme files to `~/.oh-my-zsh/custom/themes/`. The choice is yours based on your preferences.
 
+Preview installer actions without changing files or cloning repositories:
+
+```sh
+./install.sh --dry-run
+```
+
 ## Feature 🚀
 
 - Adapt to Linux or macOS
@@ -28,6 +34,7 @@ Alternatively, you can manually copy the theme files to `~/.oh-my-zsh/custom/the
 - Python environment (conda, virtualenv)
 - Displaying the environment identified based on files in the working directory (Node - "package.json")
 - One-stop installation script
+- Optional lazy loading for conda and nvm to reduce shell startup latency
 - Selectable style
   - multiline or oneline
   - timer
@@ -51,6 +58,12 @@ You can easily customize your setup using the installation script or by modifyin
     - default: `yes`
 
 **Note**: When in `oneline` mode, the default values for the other options are set to `no`
+
+### Startup performance
+
+The installer can migrate common conda and nvm initialization blocks in `~/.zshrc` to lazy-loading functions. It creates `~/.zshrc.pacmandoh.bak` before this migration. This keeps new shell startup fast by loading conda only when `conda` is first used, and loading nvm only when `nvm`, `node`, `npm`, `npx`, or `corepack` is first used.
+
+The theme's Node version probe uses `command node` so it will not trigger the lazy nvm wrapper just because you enter a directory with `package.json`.
 
 ## Supplement 📃
 

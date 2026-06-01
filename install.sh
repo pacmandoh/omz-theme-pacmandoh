@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #                                               _________     ______
 # ______________ _____________ _________ _____________  /________  /_
@@ -7,24 +7,59 @@
 # _  .___/\__,_/ \___/ /_/ /_/ /_/\__,_/ /_/ /_/\__,_/  \____//_/ /_/
 # /_/
 
+DRY_RUN=no
+for arg in "$@"; do
+  case "$arg" in
+  -n | --dry-run)
+    DRY_RUN=yes
+    ;;
+  -h | --help)
+    printf "Usage: %s [--dry-run]\n" "$0"
+    exit 0
+    ;;
+  esac
+done
+
 #%% ============= utils ============= %%#
+is_dry_run() {
+  [ "$DRY_RUN" == yes ]
+}
+
+dry_run_msg() {
+  printf "\033[1m[dry-run]\033[0m %s\n" "$*"
+}
+
 select_option() {
-  mapfile -t choices < <(printf "%s\n" "$@" | grep -vE "^multi$")
+  choices=()
+  is_multi=no
+  for choice in "$@"; do
+    if [ "$choice" == "multi" ]; then
+      is_multi=yes
+    else
+      choices+=("$choice")
+    fi
+  done
+
   selected=0
-  typeset -A multi_selected=()
+  multi_selected=()
   tput sc
 
   while true; do
     tput rc
     for index in "${!choices[@]}"; do
-      if [[ " ${multi_selected[*]} " == *" $index "* ]]; then
+      is_selected=no
+      for picked in "${multi_selected[@]}"; do
+        [ "$picked" == "$index" ] && is_selected=yes
+      done
+
+      if [ "$is_selected" == yes ]; then
         if [ "$index" -eq $selected ]; then
           printf "\033[1m\033[4m\033[34m\u25CF %s\033[0m\n" "${choices[$index]}"
         else
           printf "\033[1m\033[34m\u25CF %s\033[0m\n" "${choices[$index]}"
         fi
       elif [ "$index" -eq $selected ]; then
-        if printf '%s\n' "$@" | grep -q "multi"; then
+        if [ "$is_multi" == yes ]; then
           if [ "$selected" -eq "$((${#choices[@]} - 1))" ]; then
             printf "\033[1m\033[4m\033[92m✔ \033[34m%s\033[0m\n" "${choices[$index]}"
           else
@@ -51,21 +86,35 @@ select_option() {
       fi
       ;;
     "")
-      if printf '%s\n' "$@" | grep -q "multi"; then
+      if [ "$is_multi" == yes ]; then
+        selected_is_picked=no
+        for picked in "${multi_selected[@]}"; do
+          [ "$picked" == "$selected" ] && selected_is_picked=yes
+        done
+
         if [ "${choices[$selected]}" == "apply" ]; then
           break
+        elif [ "${choices[$selected]}" == "none" ]; then
+          multi_selected=()
+          break
         elif [ "${choices[$selected]}" == "all" ]; then
-          unset "choices[0]"
-          unset "choices[${#choices[@]}]"
+          multi_selected=()
           for index in "${!choices[@]}"; do
-            multi_selected["${choices[$index]}"]=$index
+            [ "${choices[$index]}" == "all" ] && continue
+            [ "${choices[$index]}" == "none" ] && continue
+            [ "${choices[$index]}" == "apply" ] && continue
+            multi_selected+=("$index")
           done
           break
         else
-          if [[ " ${multi_selected[*]} " == *" $selected "* ]]; then
-            unset "multi_selected[${choices[$selected]}]"
+          if [ "$selected_is_picked" == yes ]; then
+            next_multi_selected=()
+            for picked in "${multi_selected[@]}"; do
+              [ "$picked" != "$selected" ] && next_multi_selected+=("$picked")
+            done
+            multi_selected=("${next_multi_selected[@]}")
           else
-            multi_selected["${choices[$selected]}"]="$selected"
+            multi_selected+=("$selected")
           fi
         fi
       else
@@ -75,18 +124,266 @@ select_option() {
     esac
   done
 
-  if printf '%s\n' "$@" | grep -q "multi"; then
-    multi_selected_option=("${!multi_selected[@]}")
+  if [ "$is_multi" == yes ]; then
+    multi_selected_option=()
+    for index in "${multi_selected[@]}"; do
+      multi_selected_option+=("${choices[$index]}")
+    done
   else
     selected_option="${choices[$selected]}"
   fi
   tput rc && tput ed
+}
+
+set_zshrc_value() {
+  local key=$1
+  local value=$2
+  local tmp_file
+
+  if is_dry_run; then
+    dry_run_msg "set ${key}=${value} in ~/.zshrc"
+    return
+  fi
+
+  [ -f "$HOME/.zshrc" ] || touch "$HOME/.zshrc"
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/pacmandoh.zshrc.XXXXXX") || return 1
+  if grep -q "^${key}=" "$HOME/.zshrc"; then
+    sed -E "s|^${key}=.*|${key}=${value}|" "$HOME/.zshrc" >"$tmp_file"
+  else
+    printf "\n%s=%s\n" "$key" "$value" >>"$HOME/.zshrc"
+    rm -f "$tmp_file"
+    return
+  fi
+  mv "$tmp_file" "$HOME/.zshrc"
+}
+
+add_zsh_plugin() {
+  local plugin=$1
+  local tmp_file
+
+  if is_dry_run; then
+    dry_run_msg "add ${plugin} to plugins=(...) in ~/.zshrc"
+    return
+  fi
+
+  [ -f "$HOME/.zshrc" ] || touch "$HOME/.zshrc"
+  grep -Eq "plugins=\(${plugin}([[:space:]]|\\))|plugins=\([^)]*[[:space:]]${plugin}([[:space:]]|\\))" "$HOME/.zshrc" && return
+  if ! grep -q "plugins=(" "$HOME/.zshrc"; then
+    printf "\nplugins=(%s)\n" "$plugin" >>"$HOME/.zshrc"
+    return
+  fi
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/pacmandoh.zshrc.XXXXXX") || return 1
+  sed -E "s|plugins=\\(([^)]*)\\)|plugins=(\\1 ${plugin})|" "$HOME/.zshrc" >"$tmp_file"
+  mv "$tmp_file" "$HOME/.zshrc"
+}
+
+backup_zshrc_once() {
+  if is_dry_run; then
+    dry_run_msg "backup ~/.zshrc to ~/.zshrc.pacmandoh.bak"
+    return
+  fi
+
+  [ -f "$HOME/.zshrc" ] || touch "$HOME/.zshrc"
+  [ -f "$HOME/.zshrc.pacmandoh.bak" ] || cp "$HOME/.zshrc" "$HOME/.zshrc.pacmandoh.bak"
+}
+
+install_omz_from_git() {
+  local remote=$1
+  local tmp_dir
+
+  if is_dry_run; then
+    dry_run_msg "clone ${remote} into ~/.oh-my-zsh"
+    return 0
+  fi
+
+  tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/pacmandoh-ohmyzsh.XXXXXX") || return 1
+  printf "\033[1mCloning Oh-My-Zsh...\033[0m\n"
+  if ! git clone --depth=1 "$remote" "$tmp_dir"; then
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  printf "\033[1mInstalling Oh-My-Zsh files...\033[0m\n"
+  if ! mv "$tmp_dir" "$HOME/.oh-my-zsh"; then
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  if [ ! -f "$HOME/.zshrc" ] && [ -f "$HOME/.oh-my-zsh/templates/zshrc.zsh-template" ]; then
+    cp "$HOME/.oh-my-zsh/templates/zshrc.zsh-template" "$HOME/.zshrc"
+  fi
+}
+
+run_with_timeout() {
+  local seconds=$1
+  shift
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$seconds" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$seconds" "$@"
+  else
+    "$@"
+  fi
+}
+
+install_plugin_from_git() {
+  local plugin=$1
+  local remote=$2
+  local target="${ZSH_CUSTOM:-${HOME}/.oh-my-zsh/custom}/plugins/${plugin}"
+
+  if is_dry_run; then
+    dry_run_msg "clone ${remote} into ${target}"
+    return 0
+  fi
+
+  if [ -d "$target" ]; then
+    printf "\033[1m%s already exists \033[91m✘\033[0m\n" "$plugin"
+    sleep 1
+    return 0
+  fi
+
+  printf "\033[1mInstalling %s...\033[0m\n" "$plugin"
+  if run_with_timeout 120 git clone --depth=1 "$remote" "$target"; then
+    printf "\033[1m%s installed\033[92m ✔\033[0m\n" "$plugin"
+    sleep 1
+  else
+    printf "\033[1m%s install failed \033[91m✘\033[0m\n" "$plugin"
+    printf "\033[1mCheck your network or try the other repository source.\033[0m\n"
+    rm -rf "$target"
+    sleep 2
+  fi
+}
+
+remove_zshrc_block() {
+  local start_marker=$1
+  local end_marker=$2
+  local tmp_file
+
+  if is_dry_run; then
+    dry_run_msg "remove ~/.zshrc block from '${start_marker}' to '${end_marker}'"
+    return
+  fi
+
+  [ -f "$HOME/.zshrc" ] || touch "$HOME/.zshrc"
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/pacmandoh.zshrc.XXXXXX") || return 1
+  awk -v start="$start_marker" -v end="$end_marker" '
+    $0 == start { skip = 1; next }
+    $0 == end { skip = 0; next }
+    !skip { print }
+  ' "$HOME/.zshrc" >"$tmp_file"
+  mv "$tmp_file" "$HOME/.zshrc"
+}
+
+remove_zshrc_lines() {
+  local tmp_file
+
+  if is_dry_run; then
+    dry_run_msg "remove eager nvm source lines from ~/.zshrc"
+    return
+  fi
+
+  [ -f "$HOME/.zshrc" ] || touch "$HOME/.zshrc"
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/pacmandoh.zshrc.XXXXXX") || return 1
+  grep -vE '^(export NVM_DIR=|.*nvm\.sh.*|.*bash_completion\.d/nvm.*)' "$HOME/.zshrc" >"$tmp_file"
+  mv "$tmp_file" "$HOME/.zshrc"
+}
+
+append_zshrc_lazy_conda() {
+  local conda_bin=$1
+  local conda_root
+
+  grep -q "# >>> conda lazy initialize >>>" "$HOME/.zshrc" && return
+  conda_root=$(dirname "$(dirname "$conda_bin")")
+  if is_dry_run; then
+    dry_run_msg "append lazy conda loader for ${conda_bin} to ~/.zshrc"
+    return
+  fi
+
+  cat >>"$HOME/.zshrc" <<EOF
+
+# >>> conda lazy initialize >>>
+export PATH="${conda_root}/condabin:\$PATH"
+
+__pacmandoh_conda_load() {
+  unset -f conda
+  local __conda_setup
+  __conda_setup="\$("${conda_bin}" "shell.zsh" "hook" 2> /dev/null)"
+  if [ \$? -eq 0 ]; then
+    eval "\$__conda_setup"
+  elif [ -f "${conda_root}/etc/profile.d/conda.sh" ]; then
+    . "${conda_root}/etc/profile.d/conda.sh"
+  else
+    export PATH="${conda_root}/bin:\$PATH"
+  fi
+  unset __conda_setup
+}
+
+conda() {
+  __pacmandoh_conda_load
+  conda "\$@"
+}
+# <<< conda lazy initialize <<<
+EOF
+}
+
+append_zshrc_lazy_nvm() {
+  grep -q "__pacmandoh_nvm_load" "$HOME/.zshrc" && return
+  if is_dry_run; then
+    dry_run_msg "append lazy nvm loader to ~/.zshrc"
+    return
+  fi
+
+  cat >>"$HOME/.zshrc" <<'EOF'
+
+export NVM_DIR="$HOME/.nvm"
+
+__pacmandoh_nvm_load() {
+  unset -f nvm node npm npx corepack
+  [ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && . "/opt/homebrew/opt/nvm/nvm.sh"
+  [ -s "/usr/local/opt/nvm/nvm.sh" ] && . "/usr/local/opt/nvm/nvm.sh"
+  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+  [ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && . "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"
+  [ -s "/usr/local/opt/nvm/etc/bash_completion.d/nvm" ] && . "/usr/local/opt/nvm/etc/bash_completion.d/nvm"
+}
+
+nvm() { __pacmandoh_nvm_load; nvm "$@"; }
+node() { __pacmandoh_nvm_load; node "$@"; }
+npm() { __pacmandoh_nvm_load; npm "$@"; }
+npx() { __pacmandoh_nvm_load; npx "$@"; }
+corepack() { __pacmandoh_nvm_load; corepack "$@"; }
+EOF
+}
+
+configure_lazy_shell_tools() {
+  local conda_bin=""
+
+  backup_zshrc_once
+
+  [ -x "$HOME/miniconda3/bin/conda" ] && conda_bin="$HOME/miniconda3/bin/conda"
+  [ -z "$conda_bin" ] && [ -x "$HOME/anaconda3/bin/conda" ] && conda_bin="$HOME/anaconda3/bin/conda"
+  [ -z "$conda_bin" ] && conda_bin=$(command -v conda 2>/dev/null)
+
+  if [ -n "$conda_bin" ]; then
+    if ! grep -q "# >>> conda lazy initialize >>>" "$HOME/.zshrc"; then
+      remove_zshrc_block "# >>> conda initialize >>>" "# <<< conda initialize <<<"
+      append_zshrc_lazy_conda "$conda_bin"
+    fi
+  fi
+
+  if [ -d "$HOME/.nvm" ] || [ -d "/opt/homebrew/opt/nvm" ] || [ -d "/usr/local/opt/nvm" ]; then
+    if ! grep -q "__pacmandoh_nvm_load" "$HOME/.zshrc"; then
+      remove_zshrc_lines
+      append_zshrc_lazy_nvm
+    fi
+  fi
 }
 #%% ================================= %%#
 
 clear
 tput civis
 printf "\033[1mWelcome to PacmanDoh's installer!\n\n"
+is_dry_run && printf "\033[1mDry-run mode: no files will be changed and no repositories will be cloned.\033[0m\n\n"
 
 echo -e '\033[95m                                              _________     ______'
 sleep 0.05
@@ -131,23 +428,23 @@ if [ "$selected_option" == yes ]; then
     sleep 2
     exit 1
   fi
-  if [ "$selected_option" == "mirrors_tsinghua" ]; then
-    # tsinghua installer!
-    if [ -d "$HOME/.oh-my-zsh" ]; then
-      printf "\033[1m\033[91mOh-My-Zsh already exists! \033[91m✘\033[0m\n"
-      sleep 1
-      tput cuu 1 && tput ed
-    else
-      printf "\033[1m\033[92mInstalling...\033[0m\n"
-      git clone https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git "$HOME/ohmyzsh" &>/dev/null &&
-      REMOTE=https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git RUNZSH=no bash ~/ohmyzsh/tools/install.sh < /dev/null &>/dev/null &&
-    [ -d "$HOME/ohmyzsh" ] && rm -rf "$HOME/ohmyzsh"
-      tput cuu 1 && tput ed
-      printf "\033[1mDone!\033[92m ✔\033[0m\n"
-      sleep 1 
-      tput cuu 1 && tput ed
-    fi
-  else
+	  if [ "$selected_option" == "mirrors_tsinghua" ]; then
+	    # tsinghua installer!
+	    if [ -d "$HOME/.oh-my-zsh" ]; then
+	      printf "\033[1m\033[91mOh-My-Zsh already exists! \033[91m✘\033[0m\n"
+	      sleep 1
+	      tput cuu 1 && tput ed
+	    else
+	      printf "\033[1m\033[92mInstalling...\033[0m\n"
+	      if install_omz_from_git "https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git"; then
+	        printf "\033[1mDone!\033[92m ✔\033[0m\n"
+	        sleep 1
+	      else
+	        printf "\033[1m\033[91mOh-My-Zsh install failed! ✘\033[0m\n"
+	        exit 1
+	      fi
+	    fi
+	  else
     _selected_option="$selected_option"
     printf "\033[1mInstallation \033[92mtool\033[0m\033[1m:\033[0m\n"
     # printf "+-----------------------------------------------+\n"
@@ -168,23 +465,30 @@ if [ "$selected_option" == yes ]; then
       printf "\033[1m\033[91mOh-My-Zsh already exists! \033[91m✘\033[0m\n"
       sleep 1
       tput cuu 1 && tput ed
-    else
-      printf "\033[1m\033[92mInstalling...\033[0m\n"
-      exec &>/dev/null
-      if [ "$_selected_option" == github ]; then
-        [ "$selected_option" == curl ] && RUNZSH=no sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-        [ "$selected_option" == wget ] && RUNZSH=no sh -c "$(wget -O- https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-        [ "$selected_option" == fetch ] && RUNZSH=no sh -c "$(fetch -o - https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-      else
-        [ "$selected_option" == curl ] && RUNZSH=no sh -c "$(curl -fsSL https://install.ohmyz.sh/)"
-        [ "$selected_option" == wget ] && RUNZSH=no sh -c "$(wget -O- https://install.ohmyz.sh/)"
-        [ "$selected_option" == fetch ] && RUNZSH=no sh -c "$(fetch -o - https://install.ohmyz.sh/)"
-      fi
-      exec &>/dev/tty
-      tput cuu 1 && tput ed
-      printf "\033[1mDone!\033[92m ✔\033[0m\n"
-      sleep 1 && tput cuu 1 && tput ed
-    fi
+		    else
+		      printf "\033[1m\033[92mInstalling...\033[0m\n"
+		      if is_dry_run; then
+		        dry_run_msg "run Oh-My-Zsh installer from ${_selected_option} using ${selected_option}"
+		      else
+		      if [ "$_selected_option" == github ]; then
+		        [ "$selected_option" == curl ] && RUNZSH=no sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" >/dev/null 2>&1
+		        [ "$selected_option" == wget ] && RUNZSH=no sh -c "$(wget -O- https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" >/dev/null 2>&1
+	        [ "$selected_option" == fetch ] && RUNZSH=no sh -c "$(fetch -o - https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" >/dev/null 2>&1
+	      else
+	        [ "$selected_option" == curl ] && RUNZSH=no sh -c "$(curl -fsSL https://install.ohmyz.sh/)" >/dev/null 2>&1
+		        [ "$selected_option" == wget ] && RUNZSH=no sh -c "$(wget -O- https://install.ohmyz.sh/)" >/dev/null 2>&1
+		        [ "$selected_option" == fetch ] && RUNZSH=no sh -c "$(fetch -o - https://install.ohmyz.sh/)" >/dev/null 2>&1
+		      fi
+		      fi
+		      tput cuu 1 && tput ed
+		      if is_dry_run || [ -d "$HOME/.oh-my-zsh" ]; then
+		        printf "\033[1mDone!\033[92m ✔\033[0m\n"
+		      else
+	        printf "\033[1m\033[91mOh-My-Zsh install failed! ✘\033[0m\n"
+	        exit 1
+	      fi
+	      sleep 1 && tput cuu 1 && tput ed
+	    fi
   fi
 fi
 #=================================================================================#
@@ -193,8 +497,16 @@ fi
 printf "\033[1m2. Installing \033[95mpacmandoh...\033[0m\n"
 sleep 1
 tput cuu 1 && tput ed
-[ ! -d "$HOME/.oh-my-zsh" ] && printf "\033[1m\033[91mOh-My-Zsh isn't installed! ✘\n" && exit
-cp ./pacmandoh.zsh-theme "$HOME/.oh-my-zsh/custom/themes"
+if ! is_dry_run && [ ! -d "$HOME/.oh-my-zsh" ]; then
+  printf "\033[1m\033[91mOh-My-Zsh isn't installed! ✘\n"
+  exit
+fi
+if is_dry_run; then
+  dry_run_msg "copy pacmandoh.zsh-theme to ~/.oh-my-zsh/custom/themes/"
+else
+  mkdir -p "$HOME/.oh-my-zsh/custom/themes"
+  cp ./pacmandoh.zsh-theme "$HOME/.oh-my-zsh/custom/themes/"
+fi
 printf "\033[1mDone!\033[92m ✔\033[0m\n" && sleep 1 && tput cuu 1 && tput ed
 
 printf "\033[1m2. Modify \033[93mZSH_THEME\033[0m \033[1min .zshrc?\033[0m\n"
@@ -202,7 +514,7 @@ config_zshrc=("auto" "manual")
 select_option "${config_zshrc[@]}"
 if [ "$selected_option" == auto ]; then
   [ "$ZSH_THEME" != "random" ] && tput cuu 1 && tput ed &&
-    sed -i -E 's/^ZSH_THEME=.*/ZSH_THEME="pacmandoh"/' "$HOME/.zshrc" &&
+    set_zshrc_value "ZSH_THEME" '"pacmandoh"' &&
     printf "\033[1mDone!\033[92m ✔\033[0m\n" &&
     sleep 1 &&
     tput cuu 1 && tput ed
@@ -230,8 +542,8 @@ printf "\033[1m3. Additional config options:\033[0m\n"
 printf "\033[1m- multiline or oneline?\033[0m\n"
 options=("oneline" "default")
 select_option "${options[@]}"
-! grep -q "PACMANDOH_PROMPT_ALTERNATIVE" "$HOME/.zshrc" && [ "$selected_option" == oneline ] && echo -e \
-  "\nPACMANDOH_PROMPT_ALTERNATIVE=oneline" >>"$HOME/.zshrc"
+! grep -q "PACMANDOH_PROMPT_ALTERNATIVE" "$HOME/.zshrc" && [ "$selected_option" == oneline ] &&
+  set_zshrc_value "PACMANDOH_PROMPT_ALTERNATIVE" "oneline"
 
 if [ "$selected_option" == oneline ]; then
   tput cuu 2 && tput ed
@@ -243,27 +555,41 @@ else
   options=("no" "yes")
   printf "\033[1m- Need timer?\033[0m\n"
   select_option "${options[@]}"
-  ! grep -q "PACMANDOH_NEED_TIMER" "$HOME/.zshrc" && [ "$selected_option" == no ] && echo -e \
-    "\nPACMANDOH_NEED_TIMER=no" >>"$HOME/.zshrc"
+  ! grep -q "PACMANDOH_NEED_TIMER" "$HOME/.zshrc" && [ "$selected_option" == no ] &&
+    set_zshrc_value "PACMANDOH_NEED_TIMER" "no"
   tput cuu 1 && tput ed
 
   printf "\033[1m- Newline before PROMPT?\033[0m\n"
   select_option "${options[@]}"
-  ! grep -q "PACMANDOH_NEWLINE_BEFORE_PROMPT" "$HOME/.zshrc" && [ "$selected_option" == no ] && echo -e \
-    "\nPACMANDOH_NEWLINE_BEFORE_PROMPT=no" >>"$HOME/.zshrc"
+  ! grep -q "PACMANDOH_NEWLINE_BEFORE_PROMPT" "$HOME/.zshrc" && [ "$selected_option" == no ] &&
+    set_zshrc_value "PACMANDOH_NEWLINE_BEFORE_PROMPT" "no"
   tput cuu 2 && tput ed
 fi
 #=================================================================================#
 
+#============================== lazy shell tools ==================================#
+printf "\033[1m4. Lazy-load \033[95mconda/nvm\033[0m \033[1mto speed up startup?\033[0m\n"
+options=("yes" "no")
+select_option "${options[@]}"
+if [ "$selected_option" == yes ]; then
+  configure_lazy_shell_tools
+  tput cuu 1 && tput ed
+  printf "\033[1mDone!\033[92m ✔\033[0m\n"
+  sleep 1
+else
+  tput cuu 1 && tput ed
+fi
+#=================================================================================#
+
 #============================ custom oh-my-zsh plugins ===========================#
-printf "\033[1m4. Oh-My-Zsh plugins you need:\033[0m\n"
+printf "\033[1m5. Oh-My-Zsh plugins you need:\033[0m\n"
 # printf "+-----------------------------------------+\n"
 # printf "* If you want to install them all, select *\n"
 # printf "* all without clicking apply. In other    *\n"
 # printf "* cases, you can select the ones you want *\n"
 # printf "* to install (multiple choices)           *\n"
 # printf "+-----------------------------------------+\n"
-plugins=("all" "zsh-autosuggestions" "zsh-syntax-highlighting" "conda-zsh-completion" "apply")
+plugins=("none" "all" "zsh-autosuggestions" "zsh-syntax-highlighting" "conda-zsh-completion" "apply")
 select_option "${plugins[@]}" "multi"
 tput cuu 1 && tput ed
 
@@ -272,57 +598,35 @@ if [ ${#multi_selected_option[@]} -ne 0 ]; then
   printf "\033[1mSelect git repository:\033[0m\n"
   select_option "${git_source[@]}"
   tput cuu 1 && tput ed
-  # git clone plugins
-  if [ "$selected_option" == gitee ]; then
-    [ ${#multi_selected_option[@]} -ne 0 ] &&
-      for i in "${multi_selected_option[@]}"; do
-        if [ -d "${HOME}/.oh-my-zsh/custom/plugins/$i" ]; then
-          printf "\033[1m%s already exists \033[91m✘\033[0m\n" "$i" && sleep 1 &&
-            tput cuu 1 && tput ed
-        else
-          printf "\033[1mInstalling...\033[0m\n"
-          exec &>/dev/null &&
-          git clone "https://gitee.com/dou-aqqq/${i}.git" "${ZSH_CUSTOM:-${HOME}/.oh-my-zsh/custom}/plugins/${i}" &&
-          exec &>/dev/tty && tput cuu 1 && tput ed &&
-          printf "\033[1m%s installed\033[92m ✔\033[0m\n" "${i}" && sleep 1 && tput cuu 1 && tput ed
-        fi
-      done
-  else
-    [ ${#multi_selected_option[@]} -ne 0 ] &&
-      for i in "${multi_selected_option[@]}"; do
-        if [ -d "${HOME}/.oh-my-zsh/custom/plugins/$i" ]; then
-          printf "\033[1m%s already exists \033[91m✘\033[0m\n" "$i" && sleep 1 &&
-            tput cuu 1 && tput ed
-        else
-          printf "\033[1mInstalling...\033[0m\n"
-          exec &>/dev/null
-          [ "$i" == "zsh-autosuggestions" ] && 
-            git clone https://github.com/zsh-users/zsh-autosuggestions.git \
-            "${ZSH_CUSTOM:-${HOME}/.oh-my-zsh/custom}/plugins/zsh-autosuggestions" && tput cuu 1 && tput ed &&
-            printf "\033[1m%s installed\033[92m ✔\033[0m\n" "${i}" && sleep 1 && tput cuu 1 && tput ed
-          [ "$i" == "zsh-syntax-highlighting" ] && 
-            git clone https://github.com/zsh-users/zsh-syntax-highlighting.git \
-            "${ZSH_CUSTOM:-${HOME}/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting" && tput cuu 1 && tput ed &&
-            printf "\033[1m%s installed\033[92m ✔\033[0m\n" "${i}" && sleep 1 && tput cuu 1 && tput ed
-          [ "$i" == "conda-zsh-completion" ] && 
-            git clone https://github.com/conda-incubator/conda-zsh-completion.git \
-            "${ZSH_CUSTOM:=${HOME}/.oh-my-zsh/custom}/plugins/conda-zsh-completion" && tput cuu 1 && tput ed &&
-            printf "\033[1m%s installed\033[92m ✔\033[0m\n" "${i}" && sleep 1 && tput cuu 1 && tput ed
-          exec &>/dev/tty
-        fi
-      done
-  fi
-fi
+	  # git clone plugins
+	  if [ "$selected_option" == gitee ]; then
+	    [ ${#multi_selected_option[@]} -ne 0 ] &&
+	      for i in "${multi_selected_option[@]}"; do
+	        install_plugin_from_git "$i" "https://gitee.com/dou-aqqq/${i}.git"
+	      done
+	  else
+	    [ ${#multi_selected_option[@]} -ne 0 ] &&
+	      for i in "${multi_selected_option[@]}"; do
+	        [ "$i" == "zsh-autosuggestions" ] &&
+	          install_plugin_from_git "$i" "https://github.com/zsh-users/zsh-autosuggestions.git"
+	        [ "$i" == "zsh-syntax-highlighting" ] &&
+	          install_plugin_from_git "$i" "https://github.com/zsh-users/zsh-syntax-highlighting.git"
+	        [ "$i" == "conda-zsh-completion" ] &&
+	          install_plugin_from_git "$i" "https://github.com/conda-incubator/conda-zsh-completion.git"
+	      done
+	  fi
+		fi
 
-printf "\033[1mAdd plugins to ~/.zshrc?\033[0m\n"
-select_option "${config_zshrc[@]}"
-[ ${#multi_selected_option[@]} -ne 0 ] && [ "$selected_option" == auto ] &&
-  for i in "${multi_selected_option[@]}"; do
-    sed -i "s/\(plugins=([^)]*\))/\1 $i)/" "$HOME/.zshrc"
-  done
+if [ ${#multi_selected_option[@]} -ne 0 ]; then
+  printf "\033[1mAdd plugins to ~/.zshrc?\033[0m\n"
+  select_option "${config_zshrc[@]}"
+  [ "$selected_option" == auto ] &&
+    for i in "${multi_selected_option[@]}"; do
+      add_zsh_plugin "$i"
+    done
+fi
 
 printf "\n\033[1mDone! 🎉\033[92m ✔\033[0m\n"
 sleep 1
-clear
 tput init
-zsh
+printf "\033[1mRestart your terminal or run \033[93mexec zsh\033[0m \033[1mto use pacmandoh.\033[0m\n"
