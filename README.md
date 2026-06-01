@@ -26,6 +26,12 @@ Preview installer actions without changing files or cloning repositories:
 ./install.sh --dry-run
 ```
 
+Show full command output while installing:
+
+```sh
+./install.sh --verbose
+```
+
 ## Feature 🚀
 
 - Adapt to Linux or macOS

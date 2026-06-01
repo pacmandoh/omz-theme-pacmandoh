@@ -8,13 +8,17 @@
 # /_/
 
 DRY_RUN=no
+VERBOSE=no
 for arg in "$@"; do
   case "$arg" in
   -n | --dry-run)
     DRY_RUN=yes
     ;;
+  -v | --verbose)
+    VERBOSE=yes
+    ;;
   -h | --help)
-    printf "Usage: %s [--dry-run]\n" "$0"
+    printf "Usage: %s [--dry-run] [--verbose]\n" "$0"
     exit 0
     ;;
   esac
@@ -27,6 +31,51 @@ is_dry_run() {
 
 dry_run_msg() {
   printf "\033[1m[dry-run]\033[0m %s\n" "$*"
+}
+
+is_verbose() {
+  [ "$VERBOSE" == yes ]
+}
+
+step_msg() {
+  printf "\n\033[1m[%s/5] %s\033[0m\n" "$1" "$2"
+}
+
+task_msg() {
+  printf "  %s... " "$*"
+}
+
+task_done() {
+  printf "\033[92mdone\033[0m\n"
+}
+
+task_skip() {
+  printf "\033[93mskipped\033[0m\n"
+}
+
+task_fail() {
+  printf "\033[91mfailed\033[0m\n"
+}
+
+run_logged() {
+  local log_file
+
+  log_file=$(mktemp "${TMPDIR:-/tmp}/pacmandoh-install.XXXXXX.log") || return 1
+  if is_verbose; then
+    "$@"
+  else
+    "$@" >"$log_file" 2>&1
+  fi
+  local status=$?
+
+  if [ $status -ne 0 ] && ! is_verbose; then
+    printf "\033[1mCommand failed. Log: %s\033[0m\n" "$log_file"
+    tail -n 20 "$log_file"
+  elif [ $status -eq 0 ] && ! is_verbose; then
+    rm -f "$log_file"
+  fi
+
+  return $status
 }
 
 select_option() {
@@ -197,17 +246,21 @@ install_omz_from_git() {
   fi
 
   tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/pacmandoh-ohmyzsh.XXXXXX") || return 1
-  printf "\033[1mCloning Oh-My-Zsh...\033[0m\n"
-  if ! git clone --depth=1 "$remote" "$tmp_dir"; then
+  task_msg "Cloning Oh-My-Zsh"
+  if ! run_logged env GIT_TERMINAL_PROMPT=0 git clone --depth=1 "$remote" "$tmp_dir"; then
+    task_fail
     rm -rf "$tmp_dir"
     return 1
   fi
+  task_done
 
-  printf "\033[1mInstalling Oh-My-Zsh files...\033[0m\n"
+  task_msg "Installing Oh-My-Zsh files"
   if ! mv "$tmp_dir" "$HOME/.oh-my-zsh"; then
+    task_fail
     rm -rf "$tmp_dir"
     return 1
   fi
+  task_done
 
   if [ ! -f "$HOME/.zshrc" ] && [ -f "$HOME/.oh-my-zsh/templates/zshrc.zsh-template" ]; then
     cp "$HOME/.oh-my-zsh/templates/zshrc.zsh-template" "$HOME/.zshrc"
@@ -243,12 +296,12 @@ install_plugin_from_git() {
     return 0
   fi
 
-  printf "\033[1mInstalling %s...\033[0m\n" "$plugin"
-  if run_with_timeout 120 git clone --depth=1 "$remote" "$target"; then
-    printf "\033[1m%s installed\033[92m ✔\033[0m\n" "$plugin"
+  task_msg "Installing ${plugin}"
+  if run_logged run_with_timeout 120 env GIT_TERMINAL_PROMPT=0 git clone --depth=1 "$remote" "$target"; then
+    task_done
     sleep 1
   else
-    printf "\033[1m%s install failed \033[91m✘\033[0m\n" "$plugin"
+    task_fail
     printf "\033[1mCheck your network or try the other repository source.\033[0m\n"
     rm -rf "$target"
     sleep 2
@@ -383,7 +436,9 @@ configure_lazy_shell_tools() {
 clear
 tput civis
 printf "\033[1mWelcome to PacmanDoh's installer!\n\n"
-is_dry_run && printf "\033[1mDry-run mode: no files will be changed and no repositories will be cloned.\033[0m\n\n"
+is_dry_run && printf "\033[1mDry-run mode: no files will be changed and no repositories will be cloned.\033[0m\n"
+is_verbose && printf "\033[1mVerbose mode: command output will be shown.\033[0m\n"
+printf "\n"
 
 echo -e '\033[95m                                              _________     ______'
 sleep 0.05
@@ -403,7 +458,8 @@ echo
 
 printf "\033[1mOperate:\033[0m\n"
 printf "\033[1m▲ ▼ to select | ↵ to apply\033[0m\n\n"
-printf "\033[1m1. Need to install \033[93moh-my-zsh\033[0m\033[1m?\033[0m\n"
+step_msg 1 "Oh-My-Zsh"
+printf "\033[1mNeed to install \033[93moh-my-zsh\033[0m\033[1m?\033[0m\n"
 need_omz=(no yes)
 select_option "${need_omz[@]}"
 printf "\033[1A\033[K"
@@ -428,30 +484,22 @@ if [ "$selected_option" == yes ]; then
     sleep 2
     exit 1
   fi
-	  if [ "$selected_option" == "mirrors_tsinghua" ]; then
-	    # tsinghua installer!
-	    if [ -d "$HOME/.oh-my-zsh" ]; then
-	      printf "\033[1m\033[91mOh-My-Zsh already exists! \033[91m✘\033[0m\n"
-	      sleep 1
-	      tput cuu 1 && tput ed
-	    else
-	      printf "\033[1m\033[92mInstalling...\033[0m\n"
-	      if install_omz_from_git "https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git"; then
-	        printf "\033[1mDone!\033[92m ✔\033[0m\n"
-	        sleep 1
-	      else
-	        printf "\033[1m\033[91mOh-My-Zsh install failed! ✘\033[0m\n"
-	        exit 1
-	      fi
-	    fi
-	  else
-    _selected_option="$selected_option"
+
+  if [ -d "$HOME/.oh-my-zsh" ]; then
+    printf "  Oh-My-Zsh already exists... "
+    task_skip
+  elif [ "$selected_option" == "mirrors_tsinghua" ]; then
+    if ! install_omz_from_git "https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git"; then
+      printf "\033[1m\033[91mOh-My-Zsh install failed! ✘\033[0m\n"
+      exit 1
+    fi
+  elif [ "$selected_option" == "github" ]; then
+    if ! install_omz_from_git "https://github.com/ohmyzsh/ohmyzsh.git"; then
+      printf "\033[1m\033[91mOh-My-Zsh install failed! ✘\033[0m\n"
+      exit 1
+    fi
+  else
     printf "\033[1mInstallation \033[92mtool\033[0m\033[1m:\033[0m\n"
-    # printf "+-----------------------------------------------+\n"
-    # printf "* curl: installed by default on MacOS and Linux *\n"
-    # printf "* wget: MacOS needs to be installed by yourself *\n"
-    # printf "* fetch: for BSDs                               *\n"
-    # printf "+-----------------------------------------------+\n"
     tools=("curl" "wget" "fetch")
     select_option "${tools[@]}"
     while ! $selected_option --version >/dev/null 2>/dev/null; do
@@ -460,43 +508,29 @@ if [ "$selected_option" == yes ]; then
       select_option "${tools[@]}"
     done
     tput cuu 1 && tput ed
-    # github/outside downloader!
-    if [ -d "$HOME/.oh-my-zsh" ]; then
-      printf "\033[1m\033[91mOh-My-Zsh already exists! \033[91m✘\033[0m\n"
-      sleep 1
-      tput cuu 1 && tput ed
-		    else
-		      printf "\033[1m\033[92mInstalling...\033[0m\n"
-		      if is_dry_run; then
-		        dry_run_msg "run Oh-My-Zsh installer from ${_selected_option} using ${selected_option}"
-		      else
-		      if [ "$_selected_option" == github ]; then
-		        [ "$selected_option" == curl ] && RUNZSH=no sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" >/dev/null 2>&1
-		        [ "$selected_option" == wget ] && RUNZSH=no sh -c "$(wget -O- https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" >/dev/null 2>&1
-	        [ "$selected_option" == fetch ] && RUNZSH=no sh -c "$(fetch -o - https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" >/dev/null 2>&1
-	      else
-	        [ "$selected_option" == curl ] && RUNZSH=no sh -c "$(curl -fsSL https://install.ohmyz.sh/)" >/dev/null 2>&1
-		        [ "$selected_option" == wget ] && RUNZSH=no sh -c "$(wget -O- https://install.ohmyz.sh/)" >/dev/null 2>&1
-		        [ "$selected_option" == fetch ] && RUNZSH=no sh -c "$(fetch -o - https://install.ohmyz.sh/)" >/dev/null 2>&1
-		      fi
-		      fi
-		      tput cuu 1 && tput ed
-		      if is_dry_run || [ -d "$HOME/.oh-my-zsh" ]; then
-		        printf "\033[1mDone!\033[92m ✔\033[0m\n"
-		      else
-	        printf "\033[1m\033[91mOh-My-Zsh install failed! ✘\033[0m\n"
-	        exit 1
-	      fi
-	      sleep 1 && tput cuu 1 && tput ed
-	    fi
+
+    if is_dry_run; then
+      dry_run_msg "run Oh-My-Zsh installer from install.ohmyz.sh using ${selected_option}"
+    else
+      task_msg "Running Oh-My-Zsh installer"
+      case "$selected_option" in
+      curl) run_logged env RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://install.ohmyz.sh/)" ;;
+      wget) run_logged env RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(wget -O- https://install.ohmyz.sh/)" ;;
+      fetch) run_logged env RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(fetch -o - https://install.ohmyz.sh/)" ;;
+      esac
+      installer_status=$?
+      [ $installer_status -eq 0 ] && task_done || task_fail
+      if [ $installer_status -ne 0 ] || [ ! -d "$HOME/.oh-my-zsh" ]; then
+        printf "\033[1m\033[91mOh-My-Zsh install failed! ✘\033[0m\n"
+        exit 1
+      fi
+    fi
   fi
 fi
 #=================================================================================#
 
 #============================= install theme-pacmandoh ===========================#
-printf "\033[1m2. Installing \033[95mpacmandoh...\033[0m\n"
-sleep 1
-tput cuu 1 && tput ed
+step_msg 2 "Theme"
 if ! is_dry_run && [ ! -d "$HOME/.oh-my-zsh" ]; then
   printf "\033[1m\033[91mOh-My-Zsh isn't installed! ✘\n"
   exit
@@ -504,18 +538,21 @@ fi
 if is_dry_run; then
   dry_run_msg "copy pacmandoh.zsh-theme to ~/.oh-my-zsh/custom/themes/"
 else
+  task_msg "Copying pacmandoh.zsh-theme"
   mkdir -p "$HOME/.oh-my-zsh/custom/themes"
   cp ./pacmandoh.zsh-theme "$HOME/.oh-my-zsh/custom/themes/"
+  task_done
 fi
-printf "\033[1mDone!\033[92m ✔\033[0m\n" && sleep 1 && tput cuu 1 && tput ed
 
-printf "\033[1m2. Modify \033[93mZSH_THEME\033[0m \033[1min .zshrc?\033[0m\n"
+step_msg 3 ".zshrc"
+printf "\033[1mModify \033[93mZSH_THEME\033[0m \033[1min .zshrc?\033[0m\n"
 config_zshrc=("auto" "manual")
 select_option "${config_zshrc[@]}"
 if [ "$selected_option" == auto ]; then
   [ "$ZSH_THEME" != "random" ] && tput cuu 1 && tput ed &&
+    task_msg "Setting ZSH_THEME" &&
     set_zshrc_value "ZSH_THEME" '"pacmandoh"' &&
-    printf "\033[1mDone!\033[92m ✔\033[0m\n" &&
+    task_done &&
     sleep 1 &&
     tput cuu 1 && tput ed
 
@@ -532,7 +569,7 @@ fi
 #=================================================================================#
 
 #============================== pacmandoh optional ===============================#
-printf "\033[1m3. Additional config options:\033[0m\n"
+printf "\033[1mAdditional config options:\033[0m\n"
 # printf "+-----------------------------------------+\n"
 # printf "* multi or oneline ? default: multiline   *\n"
 # printf "* need timer ? default: yes               *\n"
@@ -568,13 +605,15 @@ fi
 #=================================================================================#
 
 #============================== lazy shell tools ==================================#
-printf "\033[1m4. Lazy-load \033[95mconda/nvm\033[0m \033[1mto speed up startup?\033[0m\n"
+step_msg 4 "Startup"
+printf "\033[1mLazy-load \033[95mconda/nvm\033[0m \033[1mto speed up startup?\033[0m\n"
 options=("yes" "no")
 select_option "${options[@]}"
 if [ "$selected_option" == yes ]; then
   configure_lazy_shell_tools
   tput cuu 1 && tput ed
-  printf "\033[1mDone!\033[92m ✔\033[0m\n"
+  task_msg "Configuring lazy loaders"
+  task_done
   sleep 1
 else
   tput cuu 1 && tput ed
@@ -582,7 +621,8 @@ fi
 #=================================================================================#
 
 #============================ custom oh-my-zsh plugins ===========================#
-printf "\033[1m5. Oh-My-Zsh plugins you need:\033[0m\n"
+step_msg 5 "Plugins"
+printf "\033[1mOh-My-Zsh plugins you need:\033[0m\n"
 # printf "+-----------------------------------------+\n"
 # printf "* If you want to install them all, select *\n"
 # printf "* all without clicking apply. In other    *\n"
