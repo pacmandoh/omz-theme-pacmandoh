@@ -236,6 +236,57 @@ backup_zshrc_once() {
   [ -f "$HOME/.zshrc.pacmandoh.bak" ] || cp "$HOME/.zshrc" "$HOME/.zshrc.pacmandoh.bak"
 }
 
+run_with_timeout() {
+  local seconds=$1
+  shift
+
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$seconds" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$seconds" "$@"
+  else
+    "$@"
+  fi
+}
+
+OMZ_MIRROR_CERNET="https://mirrors.cernet.edu.cn/ohmyzsh.git"
+OMZ_MIRROR_TUNA="https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git"
+OMZ_MIRROR_GITHUB="https://github.com/ohmyzsh/ohmyzsh.git"
+
+probe_omz_mirror() {
+  local url=$1
+
+  run_with_timeout 5 env GIT_TERMINAL_PROMPT=0 git ls-remote --heads "$url" >/dev/null 2>&1
+}
+
+detect_omz_mirror() {
+  if probe_omz_mirror "$OMZ_MIRROR_CERNET"; then
+    echo "cernet"
+  elif probe_omz_mirror "$OMZ_MIRROR_TUNA"; then
+    echo "tuna"
+  else
+    echo "github"
+  fi
+}
+
+omz_mirror_label() {
+  case "$1" in
+  cernet) echo "CERNET (China Education and Research Network)" ;;
+  tuna) echo "TUNA (Tsinghua University TUNA Association)" ;;
+  github) echo "GitHub" ;;
+  esac
+}
+
+resolve_omz_source() {
+  case "$1" in
+  "Auto Detect (Recommended)") detect_omz_mirror ;;
+  CERNET*) echo "cernet" ;;
+  TUNA*) echo "tuna" ;;
+  GitHub) echo "github" ;;
+  *) echo "installer" ;;
+  esac
+}
+
 install_omz_from_git() {
   local remote=$1
   local tmp_dir
@@ -267,17 +318,68 @@ install_omz_from_git() {
   fi
 }
 
-run_with_timeout() {
-  local seconds=$1
-  shift
+install_omz_from_installer() {
+  printf "\033[1mInstallation \033[92mtool\033[0m\033[1m:\033[0m\n"
+  tools=("curl" "wget" "fetch")
+  select_option "${tools[@]}"
+  while ! $selected_option --version >/dev/null 2>/dev/null; do
+    tput cuu 1 && tput ed
+    printf "\033[1m\033[91mTool isn't installed! ✘\033[0m\n"
+    select_option "${tools[@]}"
+  done
+  tput cuu 1 && tput ed
 
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "$seconds" "$@"
-  elif command -v gtimeout >/dev/null 2>&1; then
-    gtimeout "$seconds" "$@"
-  else
-    "$@"
+  if is_dry_run; then
+    dry_run_msg "run Oh-My-Zsh installer from install.ohmyz.sh using ${selected_option}"
+    return 0
   fi
+
+  task_msg "Running Oh-My-Zsh installer"
+  case "$selected_option" in
+  curl) run_logged env RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://install.ohmyz.sh/)" ;;
+  wget) run_logged env RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(wget -O- https://install.ohmyz.sh/)" ;;
+  fetch) run_logged env RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(fetch -o - https://install.ohmyz.sh/)" ;;
+  esac
+  installer_status=$?
+  [ $installer_status -eq 0 ] && task_done || task_fail
+  if [ $installer_status -ne 0 ] || [ ! -d "$HOME/.oh-my-zsh" ]; then
+    return 1
+  fi
+}
+
+PLUGIN_PROBE_GITEE="https://gitee.com/dou-aqqq/zsh-autosuggestions.git"
+PLUGIN_PROBE_GITHUB="https://github.com/zsh-users/zsh-autosuggestions.git"
+
+detect_plugin_source() {
+  if probe_omz_mirror "$PLUGIN_PROBE_GITEE"; then
+    echo "gitee"
+  else
+    echo "github"
+  fi
+}
+
+resolve_plugin_source() {
+  case "$1" in
+  "Auto Detect (Recommended)") detect_plugin_source ;;
+  gitee) echo "gitee" ;;
+  *) echo "github" ;;
+  esac
+}
+
+plugin_source_remote() {
+  local plugin=$1
+  local source=$2
+
+  if [ "$source" == gitee ]; then
+    printf "https://gitee.com/dou-aqqq/%s.git" "$plugin"
+    return
+  fi
+
+  case "$plugin" in
+  zsh-autosuggestions) printf "https://github.com/zsh-users/zsh-autosuggestions.git" ;;
+  zsh-syntax-highlighting) printf "https://github.com/zsh-users/zsh-syntax-highlighting.git" ;;
+  conda-zsh-completion) printf "https://github.com/conda-incubator/conda-zsh-completion.git" ;;
+  esac
 }
 
 install_plugin_from_git() {
@@ -467,12 +569,13 @@ printf "\033[1A\033[K"
 #================================== omz install ==================================#
 if [ "$selected_option" == yes ]; then
   printf "\033[1mInstallation \033[91msource\033[0m\033[1m:\033[0m\n"
-  # printf "+--------------------------------------------+\n"
-  # printf "* github_installer: source repository        *\n"
-  # printf "* mirrors_tsinghua: for China                *\n"
-  # printf "* outside_installer: mirrored outside github *\n"
-  # printf "+--------------------------------------------+\n"
-  _source=("github" "mirrors_tsinghua" "outside_installer")
+  _source=(
+    "Auto Detect (Recommended)"
+    "CERNET (China Education and Research Network)"
+    "TUNA (Tsinghua University TUNA Association)"
+    "GitHub"
+    "Official installer (install.ohmyz.sh)"
+  )
   select_option "${_source[@]}"
   tput cuu 1 && tput ed
   # check zsh
@@ -488,39 +591,23 @@ if [ "$selected_option" == yes ]; then
   if [ -d "$HOME/.oh-my-zsh" ]; then
     printf "  Oh-My-Zsh already exists... "
     task_skip
-  elif [ "$selected_option" == "mirrors_tsinghua" ]; then
-    if ! install_omz_from_git "https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git"; then
-      printf "\033[1m\033[91mOh-My-Zsh install failed! ✘\033[0m\n"
-      exit 1
-    fi
-  elif [ "$selected_option" == "github" ]; then
-    if ! install_omz_from_git "https://github.com/ohmyzsh/ohmyzsh.git"; then
-      printf "\033[1m\033[91mOh-My-Zsh install failed! ✘\033[0m\n"
-      exit 1
-    fi
   else
-    printf "\033[1mInstallation \033[92mtool\033[0m\033[1m:\033[0m\n"
-    tools=("curl" "wget" "fetch")
-    select_option "${tools[@]}"
-    while ! $selected_option --version >/dev/null 2>/dev/null; do
-      tput cuu 1 && tput ed
-      printf "\033[1m\033[91mTool isn't installed! ✘\033[0m\n"
-      select_option "${tools[@]}"
-    done
-    tput cuu 1 && tput ed
-
-    if is_dry_run; then
-      dry_run_msg "run Oh-My-Zsh installer from install.ohmyz.sh using ${selected_option}"
+    omz_source=$(resolve_omz_source "$selected_option")
+    if [ "$omz_source" == "installer" ]; then
+      if ! install_omz_from_installer; then
+        printf "\033[1m\033[91mOh-My-Zsh install failed! ✘\033[0m\n"
+        exit 1
+      fi
     else
-      task_msg "Running Oh-My-Zsh installer"
-      case "$selected_option" in
-      curl) run_logged env RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://install.ohmyz.sh/)" ;;
-      wget) run_logged env RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(wget -O- https://install.ohmyz.sh/)" ;;
-      fetch) run_logged env RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(fetch -o - https://install.ohmyz.sh/)" ;;
+      if [ "$selected_option" == "Auto Detect (Recommended)" ]; then
+        printf "  Detected source: %s\n" "$(omz_mirror_label "$omz_source")"
+      fi
+      case "$omz_source" in
+      cernet) omz_remote=$OMZ_MIRROR_CERNET ;;
+      tuna) omz_remote=$OMZ_MIRROR_TUNA ;;
+      github) omz_remote=$OMZ_MIRROR_GITHUB ;;
       esac
-      installer_status=$?
-      [ $installer_status -eq 0 ] && task_done || task_fail
-      if [ $installer_status -ne 0 ] || [ ! -d "$HOME/.oh-my-zsh" ]; then
+      if ! install_omz_from_git "$omz_remote"; then
         printf "\033[1m\033[91mOh-My-Zsh install failed! ✘\033[0m\n"
         exit 1
       fi
@@ -634,28 +721,18 @@ select_option "${plugins[@]}" "multi"
 tput cuu 1 && tput ed
 
 if [ ${#multi_selected_option[@]} -ne 0 ]; then
-  git_source=("github" "gitee")
+  git_source=("Auto Detect (Recommended)" "github" "gitee")
   printf "\033[1mSelect git repository:\033[0m\n"
   select_option "${git_source[@]}"
   tput cuu 1 && tput ed
-	  # git clone plugins
-	  if [ "$selected_option" == gitee ]; then
-	    [ ${#multi_selected_option[@]} -ne 0 ] &&
-	      for i in "${multi_selected_option[@]}"; do
-	        install_plugin_from_git "$i" "https://gitee.com/dou-aqqq/${i}.git"
-	      done
-	  else
-	    [ ${#multi_selected_option[@]} -ne 0 ] &&
-	      for i in "${multi_selected_option[@]}"; do
-	        [ "$i" == "zsh-autosuggestions" ] &&
-	          install_plugin_from_git "$i" "https://github.com/zsh-users/zsh-autosuggestions.git"
-	        [ "$i" == "zsh-syntax-highlighting" ] &&
-	          install_plugin_from_git "$i" "https://github.com/zsh-users/zsh-syntax-highlighting.git"
-	        [ "$i" == "conda-zsh-completion" ] &&
-	          install_plugin_from_git "$i" "https://github.com/conda-incubator/conda-zsh-completion.git"
-	      done
-	  fi
-		fi
+  plugin_source=$(resolve_plugin_source "$selected_option")
+  if [ "$selected_option" == "Auto Detect (Recommended)" ]; then
+    printf "  Detected source: %s\n" "$plugin_source"
+  fi
+  for i in "${multi_selected_option[@]}"; do
+    install_plugin_from_git "$i" "$(plugin_source_remote "$i" "$plugin_source")"
+  done
+fi
 
 if [ ${#multi_selected_option[@]} -ne 0 ]; then
   printf "\033[1mAdd plugins to ~/.zshrc?\033[0m\n"
