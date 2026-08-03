@@ -236,7 +236,7 @@ precmd() {
 _RPROMPT_ALTERNATIVE() {
   case $PACMANDOH_PROMPT_ALTERNATIVE in
   multiline)
-    echo -n "$(check_exit_status)${bold}❮֍ %*❯$reset"
+    echo -n "$(check_exit_status)${bold}❮%*❯$reset"
     ;;
   oneline)
     echo -n "%(?.. %? %F{red}%B⨯%b%F{reset})%(1j. %j %F{yellow}%B⚙%b%F{reset}.)"
