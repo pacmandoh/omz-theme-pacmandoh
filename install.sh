@@ -21,8 +21,14 @@ pacmandoh_fetch_remote_file() {
   local path=$1
   local dest=$2
 
-  curl -fsSL "$PACMANDOH_GITEE_RAW_BASE/$path" -o "$dest" 2>/dev/null ||
-    curl -fsSL "$PACMANDOH_GITHUB_RAW_BASE/$path" -o "$dest"
+  if curl -fsSL "$PACMANDOH_GITEE_RAW_BASE/$path" -o "$dest" 2>/dev/null; then
+    return 0
+  fi
+  if curl -fsSL "$PACMANDOH_GITHUB_RAW_BASE/$path" -o "$dest"; then
+    return 0
+  fi
+  printf 'Failed to download %s\n' "$path" >&2
+  return 1
 }
 
 pacmandoh_fetch_remote_root() {
