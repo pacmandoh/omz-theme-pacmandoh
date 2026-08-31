@@ -191,7 +191,9 @@ append_zshrc_lazy_conda() {
   local conda_bin=$1
   local conda_root
 
-  [ -f "$HOME/.zshrc" ] && grep -q "# >>> conda lazy initialize >>>" "$HOME/.zshrc" && return
+  if [ -f "$HOME/.zshrc" ] && grep -q "# >>> conda lazy initialize >>>" "$HOME/.zshrc"; then
+    return
+  fi
   conda_root=$(dirname "$(dirname "$conda_bin")")
   if is_dry_run; then
     dry_run_msg "append lazy conda loader for ${conda_bin} to ~/.zshrc"
@@ -226,7 +228,9 @@ EOF
 }
 
 append_zshrc_lazy_nvm() {
-  [ -f "$HOME/.zshrc" ] && grep -q "__pacmandoh_nvm_load" "$HOME/.zshrc" && return
+  if [ -f "$HOME/.zshrc" ] && grep -q "__pacmandoh_nvm_load" "$HOME/.zshrc"; then
+    return
+  fi
   if is_dry_run; then
     dry_run_msg "append lazy nvm loader to ~/.zshrc"
     return
@@ -258,9 +262,13 @@ configure_lazy_shell_tools() {
 
   backup_zshrc_once
 
-  [ -x "$HOME/miniconda3/bin/conda" ] && conda_bin="$HOME/miniconda3/bin/conda"
-  [ -z "$conda_bin" ] && [ -x "$HOME/anaconda3/bin/conda" ] && conda_bin="$HOME/anaconda3/bin/conda"
-  [ -z "$conda_bin" ] && conda_bin=$(command -v conda 2>/dev/null)
+  if [ -x "$HOME/miniconda3/bin/conda" ]; then
+    conda_bin="$HOME/miniconda3/bin/conda"
+  elif [ -x "$HOME/anaconda3/bin/conda" ]; then
+    conda_bin="$HOME/anaconda3/bin/conda"
+  else
+    conda_bin=$(command -v conda 2>/dev/null || true)
+  fi
 
   if [ -n "$conda_bin" ]; then
     if ! { [ -f "$HOME/.zshrc" ] && grep -q "# >>> conda lazy initialize >>>" "$HOME/.zshrc"; }; then
