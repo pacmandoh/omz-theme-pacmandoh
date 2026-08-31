@@ -113,8 +113,11 @@ is_verbose() {
 
 run_logged() {
   local log_file
+  local tmpdir=${TMPDIR:-/tmp}
 
-  log_file=$(mktemp "${TMPDIR:-/tmp}/pacmandoh-install.XXXXXX.log") || return 1
+  tmpdir=${tmpdir%/}
+  log_file=$(mktemp "${tmpdir}/pacmandoh-install.XXXXXX") || return 1
+  log_file="${log_file}.log"
   if is_verbose; then
     "$@"
   else
