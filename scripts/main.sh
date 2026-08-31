@@ -66,7 +66,16 @@ pacmandoh_run_noninteractive() {
   pacmandoh_finish
 }
 
+pacmandoh_require_interactive_terminal() {
+  if { [ -e /dev/tty ] && true </dev/tty; } 2>/dev/null; then
+    return 0
+  fi
+  err_msg "Interactive installer needs a terminal. Run: curl ... | bash -s -- --yes"
+  exit 1
+}
+
 pacmandoh_run_interactive() {
+  pacmandoh_require_interactive_terminal
   pacmandoh_print_banner
 
   _pacmandoh_menu_single "Install Oh-My-Zsh?" no yes

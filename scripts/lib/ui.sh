@@ -216,7 +216,12 @@ _pacmandoh_menu_finish() {
 _pacmandoh_read_key() {
   local key rest rest2
 
-  IFS= read -r -s -n 1 key </dev/tty 2>/dev/null || IFS= read -r -s -n 1 key || {
+  if ! { [ -e /dev/tty ] && true </dev/tty; } 2>/dev/null; then
+    echo "QUIT"
+    return 0
+  fi
+
+  IFS= read -r -s -n 1 key </dev/tty 2>/dev/null || {
     echo "QUIT"
     return 0
   }
@@ -441,7 +446,8 @@ _pacmandoh_menu_single() {
       ;;
     QUIT)
       _pacmandoh_menu_finish
-      return 1
+      err_msg "Installation cancelled."
+      exit 1
       ;;
     esac
   done
@@ -546,18 +552,29 @@ _pacmandoh_menu_multi() {
     QUIT)
       PACMANDOH_MENU_RESULT_ITEMS=()
       _pacmandoh_menu_finish
-      return 1
+      err_msg "Installation cancelled."
+      exit 1
       ;;
     esac
   done
 }
 
 pacmandoh_print_banner() {
-  clear
+  if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
+    tput clear 2>/dev/null || clear 2>/dev/null || printf '\n'
+  elif [[ -t 1 ]]; then
+    clear 2>/dev/null || printf '\n'
+  else
+    printf '\n'
+  fi
   _pacmandoh_ui_show_cursor
   printf "\033[1mPacmanDoh Terminal Installer\n\n"
-  is_dry_run && printf "\033[1mDry-run mode: no files will be changed and no repositories will be cloned.\033[0m\n"
-  is_verbose && printf "\033[1mVerbose mode: command output will be shown.\033[0m\n"
+  if is_dry_run; then
+    printf "\033[1mDry-run mode: no files will be changed and no repositories will be cloned.\033[0m\n"
+  fi
+  if is_verbose; then
+    printf "\033[1mVerbose mode: command output will be shown.\033[0m\n"
+  fi
   printf "\n"
 
   echo -e '\033[95m                                              _________     ______'
