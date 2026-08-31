@@ -84,7 +84,8 @@ pacmandoh_run_interactive() {
   if [ "$selected_option" == yes ]; then
     _source=(
       "Auto Detect (Recommended)"
-      "CERNET (China Education and Research Network)"
+      "SJTUG (Shanghai Jiao Tong University)"
+      "Gitee"
       "TUNA (Tsinghua University TUNA Association)"
       "GitHub"
       "Official installer (install.ohmyz.sh)"

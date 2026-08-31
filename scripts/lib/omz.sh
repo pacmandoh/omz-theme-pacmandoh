@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
 
-OMZ_MIRROR_CERNET="https://mirrors.cernet.edu.cn/ohmyzsh.git"
 OMZ_MIRROR_TUNA="https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git"
+OMZ_MIRROR_SJTUG="https://mirrors.sjtug.sjtu.edu.cn/git/ohmyzsh.git"
+OMZ_MIRROR_GITEE="https://gitee.com/mirrors/oh-my-zsh.git"
 OMZ_MIRROR_GITHUB="https://github.com/ohmyzsh/ohmyzsh.git"
 
 probe_omz_mirror() {
   local url=$1
-
   run_with_timeout 5 env GIT_TERMINAL_PROMPT=0 git ls-remote --heads "$url" >/dev/null 2>&1
 }
 
 detect_omz_mirror() {
-  if probe_omz_mirror "$OMZ_MIRROR_CERNET"; then
-    echo "cernet"
+  if probe_omz_mirror "$OMZ_MIRROR_SJTUG"; then
+    echo "sjtug"
+  elif probe_omz_mirror "$OMZ_MIRROR_GITEE"; then
+    echo "gitee"
   elif probe_omz_mirror "$OMZ_MIRROR_TUNA"; then
     echo "tuna"
   else
@@ -22,8 +24,9 @@ detect_omz_mirror() {
 
 omz_mirror_label() {
   case "$1" in
-  cernet) echo "CERNET (China Education and Research Network)" ;;
   tuna) echo "TUNA (Tsinghua University TUNA Association)" ;;
+  sjtug) echo "SJTUG (Shanghai Jiao Tong University)" ;;
+  gitee) echo "Gitee" ;;
   github) echo "GitHub" ;;
   esac
 }
@@ -31,8 +34,9 @@ omz_mirror_label() {
 resolve_omz_source() {
   case "$1" in
   "Auto Detect (Recommended)" | auto) detect_omz_mirror ;;
-  CERNET*) echo "cernet" ;;
   TUNA*) echo "tuna" ;;
+  SJTUG*) echo "sjtug" ;;
+  Gitee | gitee) echo "gitee" ;;
   GitHub | github) echo "github" ;;
   *) echo "installer" ;;
   esac
@@ -49,7 +53,7 @@ install_omz_from_git() {
 
   tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/pacmandoh-ohmyzsh.XXXXXX") || return 1
   task_msg "Cloning Oh-My-Zsh"
-  if ! run_logged env GIT_TERMINAL_PROMPT=0 git clone --depth=1 "$remote" "$tmp_dir"; then
+  if ! run_logged run_with_timeout 120 env GIT_TERMINAL_PROMPT=0 git clone --depth=1 "$remote" "$tmp_dir"; then
     task_fail
     rm -rf "$tmp_dir"
     return 1
@@ -148,8 +152,9 @@ pacmandoh_install_omz_if_needed() {
 
   local omz_remote
   case "$omz_source" in
-  cernet) omz_remote=$OMZ_MIRROR_CERNET ;;
   tuna) omz_remote=$OMZ_MIRROR_TUNA ;;
+  sjtug) omz_remote=$OMZ_MIRROR_SJTUG ;;
+  gitee) omz_remote=$OMZ_MIRROR_GITEE ;;
   github) omz_remote=$OMZ_MIRROR_GITHUB ;;
   esac
 

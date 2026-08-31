@@ -58,7 +58,7 @@ Update specific plugins only:
 - **Kali-style prompt** — rounded box layout (multiline) or compact single line (oneline), git branch with ahead/behind (`↑`/`↓`), permission-aware colors
 - **Environment line** — multiline shows `🅒 conda` / `◎ venv` / `⬢ node` on its own row when active; oneline prefixes `()` with the same icons
 - **One installer** — Oh My Zsh, theme, plugins, `.zshrc` tuning
-- **Mirror-friendly** — auto-detect CERNET / TUNA / GitHub for Oh My Zsh; Gitee mirrors for plugins in China
+- **Mirror-friendly** — auto-detect SJTUG / Gitee / TUNA / GitHub for Oh My Zsh; Gitee mirrors for plugins in China
 - **Fast startup** — optional lazy-load for conda and nvm
 - **Prompt performance** — git status cache, permission-aware colors
 
