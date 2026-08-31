@@ -47,7 +47,7 @@ pacmandoh_builtin_plugin_choices() {
       [[ "$OSTYPE" == darwin* ]] && printf '%s\n' "$plugin"
       ;;
     command-not-found | systemd)
-      [[ "$OSTYPE" == linux-gnu* ]] && printf '%s\n' "$plugin"
+      [[ "$OSTYPE" == linux* ]] && printf '%s\n' "$plugin"
       ;;
     *)
       printf '%s\n' "$plugin"
